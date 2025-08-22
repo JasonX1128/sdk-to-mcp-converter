@@ -1,12 +1,22 @@
 # core/executor.py
 
 from typing import Dict, Any
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
+from itertools import islice
+
+# --- Custom Exception for Timeouts ---
+class ToolTimeoutError(Exception):
+    """Custom exception raised when a tool call exceeds its execution time limit."""
+    pass
+
+# --- Global Settings ---
+executor = ThreadPoolExecutor(max_workers=10)
+EXECUTION_TIMEOUT_SECONDS = 10
+SERIALIZATION_LIMIT = 30 # Max number of items to return from an iterator
 
 def serialize_result(result: Any) -> Any:
     """Recursively serializes a complex SDK result object to a JSON-friendly format."""
-    if hasattr(result, '__iter__') and not isinstance(result, (list, dict, str)):
-        result = list(result)
-
+    # This function no longer needs to handle iterators directly.
     if hasattr(result, 'to_dict'):
         return result.to_dict()
     
@@ -24,15 +34,46 @@ def serialize_result(result: Any) -> Any:
             
     return result
 
+def _execute_and_serialize(method_to_call, **kwargs):
+    """
+    A helper function that runs the SDK method, limits paginated results,
+    and serializes the final data.
+    """
+    result = method_to_call(**kwargs)
+    
+    metadata = {"truncated": False}
+    
+    # Check if the result is a paginated iterator that needs to be limited.
+    if hasattr(result, '__iter__') and not isinstance(result, (list, dict, str)):
+        print(f"Detected a paginated/iterable result. Limiting to first {SERIALIZATION_LIMIT} items.")
+        
+        # Take one more than the limit to see if there are more pages.
+        limited_result = list(islice(result, SERIALIZATION_LIMIT + 1))
+        
+        if len(limited_result) > SERIALIZATION_LIMIT:
+            metadata["truncated"] = True
+            # Return only the limited number of items.
+            final_result_list = limited_result[:SERIALIZATION_LIMIT]
+        else:
+            final_result_list = limited_result
+        
+        serialized_data = serialize_result(final_result_list)
+    else:
+        # For non-iterable results, just serialize them directly.
+        serialized_data = serialize_result(result)
+        
+    # Return a dictionary containing both the result and our metadata.
+    return {"result": serialized_data, "_mcp_metadata": metadata}
+
+
 def execute_tool(
     tool_name: str, 
     arguments: Dict[str, Any], 
     initialized_clients: Dict[str, Any],
-    # **FIX**: Add the 'alias_map' parameter to the function signature.
     alias_map: Dict[str, str] 
 ) -> Any:
     """
-    Finds and executes the appropriate SDK method using an alias map.
+    Finds and executes the appropriate SDK method in a separate thread with a timeout.
     """
     try:
         parts = tool_name.split('__')
@@ -60,11 +101,14 @@ def execute_tool(
     if not method_to_call:
         raise ValueError(f"Method '{method_name}' not found on target object.")
 
-    print(f"Executing tool: {tool_name} with args: {arguments}")
+    print(f"Executing tool: {tool_name} with args: {arguments} (Timeout: {EXECUTION_TIMEOUT_SECONDS}s)")
     
     try:
-        result = method_to_call(**arguments)
-        return serialize_result(result)
+        future = executor.submit(_execute_and_serialize, method_to_call, **arguments)
+        return future.result(timeout=EXECUTION_TIMEOUT_SECONDS)
+    except TimeoutError:
+        print(f"SERVER-SIDE TIMEOUT for tool {tool_name}")
+        raise ToolTimeoutError(f"Tool execution timed out on the server after {EXECUTION_TIMEOUT_SECONDS} seconds.")
     except Exception as e:
         print(f"Error executing tool {tool_name}: {e}")
         raise e

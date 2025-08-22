@@ -3,7 +3,7 @@
 import yaml
 import importlib
 import os
-import traceback # <-- Import the traceback module for detailed error logging
+import traceback
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Any, List
@@ -11,8 +11,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from core.introspector import discover_tools
-from core.executor import execute_tool
+from core.executor import execute_tool, ToolTimeoutError
 
 CONFIG_FILE_PATH = os.getenv("MCP_CONFIG", "config.yaml")
 state: Dict[str, Any] = {}
@@ -24,10 +23,10 @@ class ToolExecutionRequest(BaseModel):
 app = FastAPI(
     title="Mission Control Plane (MCP) for SDKs",
     description="Dynamically exposes Python SDK methods as tools for AI agents.",
-    version="1.4.3", # Version bump for debugging
+    version="1.5.1", # Version bump for serialization limits
 )
 
-# --- Server Startup Logic ---
+# --- Server Startup Logic (Unchanged) ---
 def load_configuration(config_path: str):
     print(f"Loading configuration from: {config_path}")
     try:
@@ -76,7 +75,6 @@ def initialize_sdk_clients():
 
             factory_args = sdk_config.copy()
             
-            # Clean up arguments before calling the factory function.
             if 'client_factory' in factory_args:
                 factory_args.update(factory_config)
                 del factory_args['client_factory']
@@ -95,6 +93,8 @@ def initialize_sdk_clients():
     print(f"Total initialized clients: {len(initialized_clients)}")
 
 def generate_tool_schemas():
+    # This function is now in core/introspector.py
+    from core.introspector import discover_tools
     print("Generating tool schemas...")
     all_tools = []
     initialized_clients = state.get("initialized_clients", {})
@@ -148,18 +148,20 @@ def get_tools():
 @app.post("/execute")
 async def execute_tool_endpoint(request: ToolExecutionRequest):
     try:
-        result = execute_tool(
+        # The result from execute_tool is now a dictionary.
+        result_dict = execute_tool(
             tool_name=request.tool_name,
             arguments=request.arguments,
             initialized_clients=state.get("initialized_clients", {}),
             alias_map=state.get("alias_map", {})
         )
-        return {"result": result}
+        # **FIX**: Return the entire dictionary, not just the 'result' key.
+        return result_dict
+    except ToolTimeoutError as e:
+        raise HTTPException(status_code=408, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        # **NEW**: Add detailed logging for any unexpected errors.
-        # This will print the full error traceback to the server's console.
         print("\n--- UNEXPECTED SERVER ERROR ---")
         traceback.print_exc()
         print("-----------------------------\n")
