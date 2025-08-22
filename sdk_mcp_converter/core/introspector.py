@@ -47,15 +47,33 @@ def generate_schema_for_method(method: object) -> Dict[str, Any]:
 
 def _discover_tools_recursive(current_object: object, config: Dict, name_prefix: str) -> List[Dict[str, Any]]:
     """
-    A recursive helper function that walks through nested operations groups.
-    **FIXED**: Now correctly separates guided and auto-discovery paths.
+    A recursive helper function that walks through nested groups, controlled by a 'discover' flag.
     """
     tools = []
     
-    # --- Guided Discovery Path ---
-    if "operations_groups" in config:
-        # If we are in guided mode, we ONLY explore what's specified in the config.
+    # --- Auto-Discovery Path ---
+    if config.get("discover") == "auto":
+        # 1. Discover all public methods at the current level.
+        for name, method in inspect.getmembers(current_object, inspect.ismethod):
+            if not name.startswith('_'):
+                tool_name = f"{name_prefix}__{name}"
+                schema = generate_schema_for_method(method)
+                schema['function']['name'] = tool_name
+                tools.append(schema)
+        
+        # 2. Recurse into ALL discovered sub-clients.
+        for name, member in inspect.getmembers(current_object):
+            if (not name.startswith('_') and 
+                not inspect.isroutine(member) and 
+                not inspect.isclass(member) and
+                not inspect.ismodule(member) and
+                hasattr(member, '__dict__')):
+                
+                new_prefix = f"{name_prefix}__{name}"
+                tools.extend(_discover_tools_recursive(member, {"discover": "auto"}, new_prefix))
 
+    # --- Guided Discovery Path ---
+    else:
         # 1. Discover methods specified for the CURRENT level, if any.
         if "include_methods" in config:
             include_methods = config.get("include_methods")
@@ -75,30 +93,6 @@ def _discover_tools_recursive(current_object: object, config: Dict, name_prefix:
             if sub_object:
                 new_prefix = f"{name_prefix}__{group_name}"
                 tools.extend(_discover_tools_recursive(sub_object, group_config, new_prefix))
-        
-    # --- Auto-Discovery Path ---
-    else:
-        # If no 'operations_groups' are specified, we explore everything.
-        
-        # 1. Discover all public methods at the current level.
-        include_methods = config.get("include_methods")
-        for name, method in inspect.getmembers(current_object, inspect.ismethod):
-            if not name.startswith('_') and (include_methods is None or name in include_methods):
-                tool_name = f"{name_prefix}__{name}"
-                schema = generate_schema_for_method(method)
-                schema['function']['name'] = tool_name
-                tools.append(schema)
-        
-        # 2. Recurse into ALL discovered sub-clients.
-        for name, member in inspect.getmembers(current_object):
-            if (not name.startswith('_') and 
-                not inspect.isroutine(member) and 
-                not inspect.isclass(member) and
-                not inspect.ismodule(member) and
-                hasattr(member, '__dict__')):
-                
-                new_prefix = f"{name_prefix}__{name}"
-                tools.extend(_discover_tools_recursive(member, {}, new_prefix))
 
     return tools
 
