@@ -1,0 +1,30 @@
+# config_github.yaml
+# An example configuration file for exposing GitHub SDK tools.
+
+sdks:
+  github:
+    # Enable this SDK for use.
+    enabled: true
+    
+    # Points to the function in core/clients.py that initializes the GitHub client.
+    client_factory:
+      path: "core.clients.init_github_client"
+      # The server will look for this environment variable to get your GitHub Personal Access Token.
+      # Make sure it's set in your .env file.
+      auth_env_var: "GITHUB_TOKEN"
+      
+    classes_to_expose:
+      - class_path: "github.Github"
+        # A short, convenient alias for the main GitHub client.
+        alias: "gh"
+        # A curated list of useful, read-only methods.
+        include_methods:
+          # Repository methods
+          - "get_repos"
+          - "get_repo"
+          # User methods
+          - "get_user"
+          - "get_users"
+          # Gist methods
+          - "get_gists"
+

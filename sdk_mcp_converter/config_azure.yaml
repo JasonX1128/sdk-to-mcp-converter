@@ -1,0 +1,33 @@
+# config_azure.yaml
+# Updated to include a short 'alias' for each class.
+
+sdks:
+  azure_resources:
+    enabled: true 
+    client_factory:
+      path: "core.clients.init_azure_resource_client"
+      auth_env_var: "AZURE_SUBSCRIPTION_ID"
+      
+    classes_to_expose:
+      - class_path: "azure.mgmt.resource.ResourceManagementClient"
+        # **NEW**: We've added a short alias for this client.
+        # The tool names will now start with "azure_rm__" instead of the long class name.
+        alias: "azure_rm"
+        operations_groups:
+          - name: "resource_groups"
+            include_methods:
+              - "list"
+              - "get"
+          - name: "resources"
+            include_methods:
+              - "list_by_resource_group"
+              - "get_by_id"
+          - name: "providers"
+            include_methods:
+              - "list"
+              - "get"
+          - name: "deployments"
+            include_methods:
+              - "list_by_resource_group"
+              - "get"
+

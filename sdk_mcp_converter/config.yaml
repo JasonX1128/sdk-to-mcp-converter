@@ -1,46 +1,40 @@
 # config.yaml
+# Updated to include aliases for the Kubernetes clients.
 
 sdks:
   kubernetes:
-    # client_factory tells our app HOW to initialize the SDK client.
-    # 'path' points to a Python function we will create later.
+    enabled: true
     client_factory:
       path: "core.clients.init_kubernetes_clients"
-
-    # classes_to_expose lists the specific API client classes within the SDK
-    # that we want to scan for methods (tools).
+    
     classes_to_expose:
       - class_path: "kubernetes.client.CoreV1Api"
+        # **NEW**: Alias for the Core API
+        alias: "k8s_core"
         include_methods:
-          # Pod-related tools
           - "list_pod_for_all_namespaces"
           - "list_namespaced_pod"
           - "read_namespaced_pod"
           - "delete_namespaced_pod"
-          # Service-related tools
           - "list_service_for_all_namespaces"
           - "list_namespaced_service"
           - "read_namespaced_service"
-          # Namespace-related tools
           - "list_namespace"
           - "read_namespace"
-          # ConfigMap-related tools
           - "list_namespaced_config_map"
           - "read_namespaced_config_map"
-          # Secret-related tools
           - "list_namespaced_secret"
           - "read_namespaced_secret"
-      # We could easily add more later, like:
+
       - class_path: "kubernetes.client.AppsV1Api"
+        # **NEW**: Alias for the Apps API
+        alias: "k8s_apps"
         include_methods:
-          # Deployment-related tools
           - "list_deployment_for_all_namespaces"
           - "list_namespaced_deployment"
           - "read_namespaced_deployment"
           - "delete_namespaced_deployment"
-          # StatefulSet-related tools
           - "list_namespaced_stateful_set"
           - "read_namespaced_stateful_set"
-          # DaemonSet-related tools
           - "list_namespaced_daemon_set"
           - "read_namespaced_daemon_set"
