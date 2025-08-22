@@ -47,35 +47,59 @@ def generate_schema_for_method(method: object) -> Dict[str, Any]:
 
 def _discover_tools_recursive(current_object: object, config: Dict, name_prefix: str) -> List[Dict[str, Any]]:
     """
-    A recursive helper function to walk through nested operations groups.
+    A recursive helper function that walks through nested operations groups.
+    **FIXED**: Now correctly separates guided and auto-discovery paths.
     """
     tools = []
     
-    # Get the include_methods list, which will be None if the key doesn't exist.
-    include_methods = config.get("include_methods")
+    # --- Guided Discovery Path ---
+    if "operations_groups" in config:
+        # If we are in guided mode, we ONLY explore what's specified in the config.
 
-    # Discover methods at the current level. Runs regardless of whether
-    # 'include_methods' is present in the config.
-    for name, method in inspect.getmembers(current_object, inspect.ismethod):
-        if not name.startswith('_'):
-            # The condition 'include_methods is None' correctly handles the case
-            # where the key is omitted, including all public methods by default.
-            if include_methods is None or name in include_methods:
+        # 1. Discover methods specified for the CURRENT level, if any.
+        if "include_methods" in config:
+            include_methods = config.get("include_methods")
+            for name, method in inspect.getmembers(current_object, inspect.ismethod):
+                if not name.startswith('_') and (include_methods is None or name in include_methods):
+                    tool_name = f"{name_prefix}__{name}"
+                    schema = generate_schema_for_method(method)
+                    schema['function']['name'] = tool_name
+                    tools.append(schema)
+
+        # 2. Recurse ONLY into the specified sub-groups.
+        for group_config in config.get("operations_groups", []):
+            group_name = group_config.get("name")
+            if not group_name: continue
+            
+            sub_object = getattr(current_object, group_name, None)
+            if sub_object:
+                new_prefix = f"{name_prefix}__{group_name}"
+                tools.extend(_discover_tools_recursive(sub_object, group_config, new_prefix))
+        
+    # --- Auto-Discovery Path ---
+    else:
+        # If no 'operations_groups' are specified, we explore everything.
+        
+        # 1. Discover all public methods at the current level.
+        include_methods = config.get("include_methods")
+        for name, method in inspect.getmembers(current_object, inspect.ismethod):
+            if not name.startswith('_') and (include_methods is None or name in include_methods):
                 tool_name = f"{name_prefix}__{name}"
                 schema = generate_schema_for_method(method)
                 schema['function']['name'] = tool_name
                 tools.append(schema)
-
-    # Recursive Step: Discover methods in nested groups
-    if "operations_groups" in config:
-        for group_config in config["operations_groups"]:
-            group_name = group_config["name"]
-            sub_object = getattr(current_object, group_name, None)
-            if sub_object:
-                new_prefix = f"{name_prefix}__{group_name}"
-                nested_tools = _discover_tools_recursive(sub_object, group_config, new_prefix)
-                tools.extend(nested_tools)
+        
+        # 2. Recurse into ALL discovered sub-clients.
+        for name, member in inspect.getmembers(current_object):
+            if (not name.startswith('_') and 
+                not inspect.isroutine(member) and 
+                not inspect.isclass(member) and
+                not inspect.ismodule(member) and
+                hasattr(member, '__dict__')):
                 
+                new_prefix = f"{name_prefix}__{name}"
+                tools.extend(_discover_tools_recursive(member, {}, new_prefix))
+
     return tools
 
 def discover_tools(client_instance: object, class_path_str: str, class_config: Dict) -> List[Dict[str, Any]]:
