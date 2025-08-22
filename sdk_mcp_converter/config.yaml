@@ -10,6 +10,25 @@ sdks:
     # classes_to_expose lists the specific API client classes within the SDK
     # that we want to scan for methods (tools).
     classes_to_expose:
-      - "kubernetes.client.CoreV1Api"
+      - class_path: "kubernetes.client.CoreV1Api"
+        include_methods:
+          # Pod-related tools
+          - "list_pod_for_all_namespaces"
+          - "list_namespaced_pod"
+          - "read_namespaced_pod"
+          - "delete_namespaced_pod"
+          # Service-related tools
+          - "list_service_for_all_namespaces"
+          - "list_namespaced_service"
+          - "read_namespaced_service"
+          # Namespace-related tools
+          - "list_namespace"
+          - "read_namespace"
+          # ConfigMap-related tools
+          - "list_namespaced_config_map"
+          - "read_namespaced_config_map"
+          # Secret-related tools
+          - "list_namespaced_secret"
+          - "read_namespaced_secret"
       # We could easily add more later, like:
       # - "kubernetes.client.AppsV1Api"

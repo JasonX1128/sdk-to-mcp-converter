@@ -4,53 +4,68 @@ import inspect
 from typing import Any, Dict, List
 
 def generate_schema_for_method(method: object) -> Dict[str, Any]:
-    """Generates a JSON Schema-like dictionary for a given method."""
+    """Generates an OpenAI-compatible JSON schema for a given method."""
     docstring = inspect.getdoc(method) or "No description available."
     signature = inspect.signature(method)
     
     properties = {}
     required = []
     
-    # Analyze each parameter in the method's signature
+    excluded_params = {'self', 'kwargs', 'args', 'async_req', 'preload_content', 
+                       '_request_timeout', '_return_http_data_only', 'custom_headers'}
+    
     for name, param in signature.parameters.items():
-        # Ignore special parameters
-        if name in ('self', 'kwargs', 'args', 'async_req', 'preload_content', '_request_timeout', '_return_http_data_only'):
+        if name in excluded_params:
             continue
             
-        # Map Python types to JSON Schema types
-        param_type = "string" # Default
-        if param.annotation in (int, float):
+        param_type = "string"
+        if param.annotation in (int, float, 'int', 'float'):
             param_type = "number"
-        elif param.annotation == bool:
+        elif param.annotation in (bool, 'bool'):
             param_type = "boolean"
+        elif param.annotation in (list, dict, 'list', 'dict'):
+            param_type = "object"
+            
+        properties[name] = {"type": param_type, "description": ""}
         
-        properties[name] = {"type": param_type}
-        
-        # If a parameter has no default value, it's required
         if param.default is inspect.Parameter.empty:
             required.append(name)
 
     return {
-        "description": docstring.split('\n')[0],
-        "parameters": {
-            "type": "object",
-            "properties": properties,
-            "required": required
+        "type": "function",
+        "function": {
+            "description": docstring.split('\n')[0],
+            "name": "", 
+            "parameters": {
+                "type": "object",
+                "properties": properties,
+                "required": required
+            }
         }
     }
 
-def discover_tools(client_instance: object, class_path_str: str) -> List[Dict[str, Any]]:
-    """Discovers all public methods on a client and generates schemas for them."""
+def discover_tools(client_instance: object, class_path_str: str, class_config: Dict) -> List[Dict[str, Any]]:
+    """
+    Discovers methods on a client and generates schemas.
+    If 'include_methods' is present in class_config, it will only include those.
+    Otherwise, it includes all public methods.
+    """
     tools = []
-    # inspect.getmembers finds all members (methods, attributes, etc.) of an object
+    # Get the list of methods to explicitly include. It's None if not specified.
+    include_methods = class_config.get("include_methods")
+
     for name, method in inspect.getmembers(client_instance, inspect.ismethod):
-        # We only care about public methods, which don't start with an underscore
         if not name.startswith('_'):
-            # Create a unique tool name, e.g., "kubernetes_client_CoreV1Api.list_pod_for_all_namespaces"
+            # **UPDATED FILTERING LOGIC**
+            # If an 'include_methods' list exists and the current method is not in it, skip.
+            # If 'include_methods' is None, this condition is false, so no methods are skipped.
+            if include_methods is not None and name not in include_methods:
+                continue
+
             tool_name = f"{class_path_str.replace('.', '_')}.{name}"
             
             schema = generate_schema_for_method(method)
-            schema['name'] = tool_name
+            schema['function']['name'] = tool_name
             tools.append(schema)
             
     return tools
