@@ -17,14 +17,3 @@ sdks:
       - class_path: "github.Github"
         # A short, convenient alias for the main GitHub client.
         alias: "gh"
-        # A curated list of useful, read-only methods.
-        include_methods:
-          # Repository methods
-          - "get_repos"
-          - "get_repo"
-          # User methods
-          - "get_user"
-          - "get_users"
-          # Gist methods
-          - "get_gists"
-
