@@ -2,15 +2,24 @@
 
 import yaml
 import importlib
+import os
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Any, List
 from dotenv import load_dotenv
 
+# Load environment variables from .env file at the very beginning.
+load_dotenv()
+
 from core.introspector import discover_tools
 from core.executor import execute_tool
 
-load_dotenv()
+# --- Configuration Setup ---
+# Read the config file path from an environment variable.
+CONFIG_FILE_PATH = os.getenv("MCP_CONFIG", "config.yaml")
+
+
+# --- Standard Setup ---
 state: Dict[str, Any] = {}
 
 class ToolExecutionRequest(BaseModel):
@@ -20,16 +29,21 @@ class ToolExecutionRequest(BaseModel):
 app = FastAPI(
     title="Mission Control Plane (MCP) for SDKs",
     description="Dynamically exposes Python SDK methods as tools for AI agents.",
-    version="1.2.1", # Version bump for bugfix
+    version="1.3.3", # Version bump for bugfix
 )
 
 # --- Server Startup Logic ---
-def load_configuration(config_path: str = "config.yaml"):
+def load_configuration(config_path: str):
+    """Loads and parses the specified YAML configuration file."""
     print(f"Loading configuration from: {config_path}")
-    with open(config_path, "r") as f:
-        config = yaml.safe_load(f)
-    state["config"] = config
-    print("Configuration loaded.")
+    try:
+        with open(config_path, "r") as f:
+            config = yaml.safe_load(f)
+        state["config"] = config
+        print("Configuration loaded.")
+    except FileNotFoundError:
+        print(f"Error: Configuration file not found at '{config_path}'. Exiting.")
+        exit()
 
 def initialize_sdk_clients():
     """Dynamically calls the factory function for each configured SDK."""
@@ -68,10 +82,11 @@ def initialize_sdk_clients():
             factory_args = sdk_config.copy()
             factory_args["classes_to_expose"] = class_paths
 
-            # **FIX**: Remove the 'client_factory' key as it's not an argument
-            # for the factory function itself.
+            # **FIX**: Merge the nested client_factory dictionary into the main arguments.
+            # This ensures keys like 'auth_env_var' are passed correctly.
             if 'client_factory' in factory_args:
-                del factory_args['client_factory']
+                factory_args.update(factory_config)
+                del factory_args['client_factory'] # Clean up the original nested dict
 
             clients = factory_func(**factory_args)
             initialized_clients.update(clients)
@@ -101,7 +116,6 @@ def generate_tool_schemas():
                 config_for_discover = class_config_item
             elif isinstance(class_config_item, str):
                 class_path_str = class_config_item
-                # config_for_discover remains an empty dict, which is the desired default
 
             if not class_path_str:
                 continue
@@ -116,7 +130,8 @@ def generate_tool_schemas():
 
 @app.on_event("startup")
 async def startup_event():
-    load_configuration()
+    """Runs all initialization steps when the server starts."""
+    load_configuration(config_path=CONFIG_FILE_PATH)
     initialize_sdk_clients()
     generate_tool_schemas()
 
@@ -126,6 +141,7 @@ def read_root():
     return {
         "status": "ok",
         "message": "MCP Server is running.",
+        "config_file": CONFIG_FILE_PATH,
         "available_tools": len(state.get("tool_schemas", []))
     }
 
