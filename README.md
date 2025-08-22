@@ -1,5 +1,5 @@
 # sdk-to-mcp-converter
-sdk to mcp converter
+sdk to mcp converter  
 any sdk should theoretically be able to be converted in its entirety with an appropriate setup. specify include_methods under appropriate operation_groups to set up specific methods. set discover: auto to add all available methods in the sdk.
 
 STEPS  
