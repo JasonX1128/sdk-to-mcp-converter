@@ -95,6 +95,10 @@ def run_conversation_loop(available_tools: list):
                 tools=available_tools,
                 tool_choice="auto",  # The model decides whether to call a tool
             )
+            # **NEW**: Log token usage for the first API call
+            usage = response.usage
+            print(f"[OpenAI Usage] Request: {usage.prompt_tokens} tokens, Response: {usage.completion_tokens} tokens")
+
         except Exception as e:
             print(f"An error occurred with the OpenAI API: {e}")
             # Remove the last user message to allow retrying
@@ -132,12 +136,15 @@ def run_conversation_loop(available_tools: list):
                 )
             
             # 5. Second call to OpenAI with the tool results
-            # This allows the model to generate a final, natural-language answer
             print("Assistant: Sending tool results back to the model...")
             final_response = client.chat.completions.create(
                 model="gpt-4",
                 messages=messages,
             )
+            # **NEW**: Log token usage for the second API call
+            final_usage = final_response.usage
+            print(f"[OpenAI Usage] Request: {final_usage.prompt_tokens} tokens, Response: {final_usage.completion_tokens} tokens")
+
             final_answer = final_response.choices[0].message.content
             print(f"Assistant: {final_answer}")
             messages.append(final_response.choices[0].message)
