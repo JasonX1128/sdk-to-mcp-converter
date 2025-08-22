@@ -3,7 +3,8 @@
 import yaml
 import importlib
 import os
-import traceback # <-- Already imported, but crucial for this feature
+import traceback
+import json # <-- Import json for pretty-printing
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Any, List
@@ -23,7 +24,7 @@ class ToolExecutionRequest(BaseModel):
 app = FastAPI(
     title="Mission Control Plane (MCP) for SDKs",
     description="Dynamically exposes Python SDK methods as tools for AI agents.",
-    version="1.6.0", # Version bump for self-debugging feature
+    version="1.6.1", # Version bump for response logging
 )
 
 # --- Server Startup Logic (Unchanged) ---
@@ -153,18 +154,20 @@ async def execute_tool_endpoint(request: ToolExecutionRequest):
             initialized_clients=state.get("initialized_clients", {}),
             alias_map=state.get("alias_map", {})
         )
+        # **NEW**: Add logging to show exactly what is being sent back.
+        print("\n--- SERVER RESPONSE TO ORCHESTRATOR ---")
+        print(json.dumps(result_dict, indent=2))
+        print("---------------------------------------\n")
         return result_dict
     except ToolTimeoutError as e:
         raise HTTPException(status_code=408, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        # **MODIFIED**: Capture the full traceback and send it in the response.
         tb_str = traceback.format_exc()
         print("\n--- UNEXPECTED SERVER ERROR ---")
         print(tb_str)
         print("-----------------------------\n")
-        # The orchestrator will parse this structured error.
         error_detail = {
             "error_message": str(e),
             "traceback": tb_str
