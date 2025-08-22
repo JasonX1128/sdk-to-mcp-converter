@@ -44,26 +44,38 @@ def generate_schema_for_method(method: object) -> Dict[str, Any]:
         }
     }
 
-def discover_tools(client_instance: object, class_path_str: str, class_config: Dict) -> List[Dict[str, Any]]:
+def _discover_tools_recursive(current_object: object, config: Dict, name_prefix: str) -> List[Dict[str, Any]]:
     """
-    Discovers methods on a client and generates schemas with OpenAI-compliant names.
+    A recursive helper function to walk through nested operations groups.
     """
     tools = []
-    include_methods = class_config.get("include_methods")
+    
+    # Base Case 1: Discover methods at the current level
+    if "include_methods" in config:
+        include_methods = config.get("include_methods")
+        for name, method in inspect.getmembers(current_object, inspect.ismethod):
+            if not name.startswith('_'):
+                if include_methods is None or name in include_methods:
+                    tool_name = f"{name_prefix}__{name}"
+                    schema = generate_schema_for_method(method)
+                    schema['function']['name'] = tool_name
+                    tools.append(schema)
 
-    for name, method in inspect.getmembers(client_instance, inspect.ismethod):
-        if not name.startswith('_'):
-            if include_methods is not None and name not in include_methods:
-                continue
-
-            # **FIX**: Use a double underscore as the separator to be OpenAI compliant.
-            # The class path's periods are replaced with single underscores.
-            # Example: kubernetes_client_CoreV1Api__list_namespaced_pod
-            class_name_mangled = class_path_str.replace('.', '_')
-            tool_name = f"{class_name_mangled}__{name}"
-            
-            schema = generate_schema_for_method(method)
-            schema['function']['name'] = tool_name
-            tools.append(schema)
-            
+    # Recursive Step: Discover methods in nested groups
+    if "operations_groups" in config:
+        for group_config in config["operations_groups"]:
+            group_name = group_config["name"]
+            sub_object = getattr(current_object, group_name, None)
+            if sub_object:
+                new_prefix = f"{name_prefix}__{group_name}"
+                nested_tools = _discover_tools_recursive(sub_object, group_config, new_prefix)
+                tools.extend(nested_tools)
+                
     return tools
+
+def discover_tools(client_instance: object, class_path_str: str, class_config: Dict) -> List[Dict[str, Any]]:
+    """
+    Discovers all tools by initiating the recursive discovery process.
+    """
+    class_name_mangled = class_path_str.replace('.', '_')
+    return _discover_tools_recursive(client_instance, class_config, class_name_mangled)

@@ -4,6 +4,9 @@ from typing import Dict, Any
 
 def serialize_result(result: Any) -> Any:
     """Recursively serializes a complex SDK result object to a JSON-friendly format."""
+    if hasattr(result, '__iter__') and not isinstance(result, (list, dict, str)):
+        result = list(result)
+
     if hasattr(result, 'to_dict'):
         return result.to_dict()
     
@@ -26,22 +29,37 @@ def execute_tool(
     arguments: Dict[str, Any], 
     initialized_clients: Dict[str, Any]
 ) -> Any:
-    """Finds and executes the appropriate SDK method based on the tool name."""
+    """
+    Finds and executes the appropriate SDK method by walking down the object path
+    for arbitrarily nested tool names.
+    """
     try:
-        # **FIX**: Split the tool name by the new double-underscore separator.
-        class_path_str_mangled, method_name = tool_name.rsplit('__', 1)
-        # Reverse the mangling of the class path (replace single underscores with periods)
+        # Split the tool name into all its parts
+        # e.g., 'Client__Group1__Group2__Method' -> ['Client', 'Group1', 'Group2', 'Method']
+        parts = tool_name.split('__')
+        class_path_str_mangled = parts[0]
+        object_path = parts[1:-1] # The nested groups, e.g., ['Group1', 'Group2']
+        method_name = parts[-1]   # The final method name
+        
         class_path_str = class_path_str_mangled.replace('_', '.')
-    except ValueError:
+    except IndexError:
         raise ValueError(f"Invalid tool_name format: {tool_name}")
 
-    client_instance = initialized_clients.get(class_path_str)
-    if not client_instance:
+    # Start with the top-level client instance
+    current_object = initialized_clients.get(class_path_str)
+    if not current_object:
         raise ValueError(f"Client for '{class_path_str}' not found.")
 
-    method_to_call = getattr(client_instance, method_name, None)
+    # Iteratively walk down the object path to get to the final target object
+    for part in object_path:
+        current_object = getattr(current_object, part, None)
+        if not current_object:
+            raise ValueError(f"Nested object '{part}' not found in tool path '{tool_name}'.")
+
+    # Get the actual method from the final object
+    method_to_call = getattr(current_object, method_name, None)
     if not method_to_call:
-        raise ValueError(f"Method '{method_name}' not found on client '{class_path_str}'.")
+        raise ValueError(f"Method '{method_name}' not found on target object.")
 
     print(f"Executing tool: {tool_name} with args: {arguments}")
     
