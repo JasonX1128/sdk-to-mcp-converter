@@ -1,3 +1,5 @@
+# core/executor.py
+
 from typing import Dict, Any
 
 def serialize_result(result: Any) -> Any:
@@ -13,7 +15,6 @@ def serialize_result(result: Any) -> Any:
         
     if not isinstance(result, (str, int, float, bool)) and result is not None:
         try:
-            # For other complex objects, return their string representation
             return str(result)
         except Exception:
             return "Unserializable Object"
@@ -27,7 +28,9 @@ def execute_tool(
 ) -> Any:
     """Finds and executes the appropriate SDK method based on the tool name."""
     try:
-        class_path_str_mangled, method_name = tool_name.rsplit('.', 1)
+        # **FIX**: Split the tool name by the new double-underscore separator.
+        class_path_str_mangled, method_name = tool_name.rsplit('__', 1)
+        # Reverse the mangling of the class path (replace single underscores with periods)
         class_path_str = class_path_str_mangled.replace('_', '.')
     except ValueError:
         raise ValueError(f"Invalid tool_name format: {tool_name}")

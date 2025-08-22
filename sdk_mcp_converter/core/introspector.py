@@ -46,23 +46,21 @@ def generate_schema_for_method(method: object) -> Dict[str, Any]:
 
 def discover_tools(client_instance: object, class_path_str: str, class_config: Dict) -> List[Dict[str, Any]]:
     """
-    Discovers methods on a client and generates schemas.
-    If 'include_methods' is present in class_config, it will only include those.
-    Otherwise, it includes all public methods.
+    Discovers methods on a client and generates schemas with OpenAI-compliant names.
     """
     tools = []
-    # Get the list of methods to explicitly include. It's None if not specified.
     include_methods = class_config.get("include_methods")
 
     for name, method in inspect.getmembers(client_instance, inspect.ismethod):
         if not name.startswith('_'):
-            # **UPDATED FILTERING LOGIC**
-            # If an 'include_methods' list exists and the current method is not in it, skip.
-            # If 'include_methods' is None, this condition is false, so no methods are skipped.
             if include_methods is not None and name not in include_methods:
                 continue
 
-            tool_name = f"{class_path_str.replace('.', '_')}.{name}"
+            # **FIX**: Use a double underscore as the separator to be OpenAI compliant.
+            # The class path's periods are replaced with single underscores.
+            # Example: kubernetes_client_CoreV1Api__list_namespaced_pod
+            class_name_mangled = class_path_str.replace('.', '_')
+            tool_name = f"{class_name_mangled}__{name}"
             
             schema = generate_schema_for_method(method)
             schema['function']['name'] = tool_name
