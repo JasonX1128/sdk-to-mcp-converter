@@ -13,21 +13,4 @@ sdks:
         # **NEW**: We've added a short alias for this client.
         # The tool names will now start with "azure_rm__" instead of the long class name.
         alias: "azure_rm"
-        operations_groups:
-          - name: "resource_groups"
-            include_methods:
-              - "list"
-              - "get"
-          - name: "resources"
-            include_methods:
-              - "list_by_resource_group"
-              - "get_by_id"
-          - name: "providers"
-            include_methods:
-              - "list"
-              - "get"
-          - name: "deployments"
-            include_methods:
-              - "list_by_resource_group"
-              - "get"
-
+        discover: auto
