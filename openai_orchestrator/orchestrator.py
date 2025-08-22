@@ -49,7 +49,6 @@ def execute_mcp_tool(tool_name: str, arguments: dict) -> dict:
         payload = {"tool_name": tool_name, "arguments": arguments}
         response = requests.post(execute_url, json=payload, timeout=MCP_REQUEST_TIMEOUT)
 
-        # **FIX**: Explicitly check for non-successful status codes.
         # This is more reliable than only relying on raise_for_status().
         if response.status_code != 200:
             try:

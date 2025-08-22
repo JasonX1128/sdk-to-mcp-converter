@@ -4,7 +4,7 @@ import yaml
 import importlib
 import os
 import traceback
-import json # <-- Import json for pretty-printing
+import json
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Any, List
@@ -22,12 +22,12 @@ class ToolExecutionRequest(BaseModel):
     arguments: Dict[str, Any] = {}
 
 app = FastAPI(
-    title="Mission Control Plane (MCP) for SDKs",
+    title="Mission Control Plane",
     description="Dynamically exposes Python SDK methods as tools for AI agents.",
-    version="1.6.1", # Version bump for response logging
+    version="1.6.1", 
 )
 
-# --- Server Startup Logic (Unchanged) ---
+# --- Server Startup Logic ---
 def load_configuration(config_path: str):
     print(f"Loading configuration from: {config_path}")
     try:
@@ -154,7 +154,7 @@ async def execute_tool_endpoint(request: ToolExecutionRequest):
             initialized_clients=state.get("initialized_clients", {}),
             alias_map=state.get("alias_map", {})
         )
-        # **NEW**: Add logging to show exactly what is being sent back.
+        # Add logging to show exactly what is being sent back.
         print("\n--- SERVER RESPONSE TO ORCHESTRATOR ---")
         print(json.dumps(result_dict, indent=2))
         print("---------------------------------------\n")

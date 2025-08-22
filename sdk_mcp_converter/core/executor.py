@@ -16,7 +16,6 @@ SERIALIZATION_LIMIT = 30 # Max number of items to return from an iterator
 
 def serialize_result(result: Any) -> Any:
     """Recursively serializes a complex SDK result object to a JSON-friendly format."""
-    # This function no longer needs to handle iterators directly.
     if hasattr(result, 'to_dict'):
         return result.to_dict()
     
