@@ -4,6 +4,7 @@ any sdk should theoretically be able to be converted in its entirety with an app
 
 STEPS  
 write the yaml file (see examples)  
+update clients.py  
 Done
 
 EXAMPLES
