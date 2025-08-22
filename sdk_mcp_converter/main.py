@@ -3,23 +3,18 @@
 import yaml
 import importlib
 import os
+import traceback # <-- Import the traceback module for detailed error logging
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Any, List
 from dotenv import load_dotenv
 
-# Load environment variables from .env file at the very beginning.
 load_dotenv()
 
 from core.introspector import discover_tools
 from core.executor import execute_tool
 
-# --- Configuration Setup ---
-# Read the config file path from an environment variable.
 CONFIG_FILE_PATH = os.getenv("MCP_CONFIG", "config.yaml")
-
-
-# --- Standard Setup ---
 state: Dict[str, Any] = {}
 
 class ToolExecutionRequest(BaseModel):
@@ -29,12 +24,11 @@ class ToolExecutionRequest(BaseModel):
 app = FastAPI(
     title="Mission Control Plane (MCP) for SDKs",
     description="Dynamically exposes Python SDK methods as tools for AI agents.",
-    version="1.3.3", # Version bump for bugfix
+    version="1.4.3", # Version bump for debugging
 )
 
 # --- Server Startup Logic ---
 def load_configuration(config_path: str):
-    """Loads and parses the specified YAML configuration file."""
     print(f"Loading configuration from: {config_path}")
     try:
         with open(config_path, "r") as f:
@@ -46,13 +40,13 @@ def load_configuration(config_path: str):
         exit()
 
 def initialize_sdk_clients():
-    """Dynamically calls the factory function for each configured SDK."""
     print("Initializing SDK clients...")
     config = state.get("config", {})
     initialized_clients = {}
+    alias_map = {}
+    
     for sdk_name, sdk_config in config.get("sdks", {}).items():
         if not sdk_config.get("enabled", True):
-            print(f"Skipping disabled SDK: {sdk_name}")
             continue
             
         factory_config = sdk_config.get("client_factory", {})
@@ -71,33 +65,36 @@ def initialize_sdk_clients():
             classes_to_expose_config = sdk_config.get("classes_to_expose", [])
             class_paths = []
             for cfg in classes_to_expose_config:
-                if isinstance(cfg, dict):
-                    class_paths.append(cfg.get("class_path"))
-                elif isinstance(cfg, str):
-                    class_paths.append(cfg)
-            
-            class_paths = [path for path in class_paths if path]
+                class_path = cfg.get("class_path") if isinstance(cfg, dict) else cfg
+                if class_path:
+                    class_paths.append(class_path)
+                    if isinstance(cfg, dict) and "alias" in cfg:
+                        alias_map[cfg["alias"]] = class_path
+                    else:
+                        mangled_path = class_path.replace('.', '_')
+                        alias_map[mangled_path] = class_path
 
-            # Prepare arguments for the factory function
             factory_args = sdk_config.copy()
-            factory_args["classes_to_expose"] = class_paths
-
-            # **FIX**: Merge the nested client_factory dictionary into the main arguments.
-            # This ensures keys like 'auth_env_var' are passed correctly.
+            
+            # Clean up arguments before calling the factory function.
             if 'client_factory' in factory_args:
                 factory_args.update(factory_config)
-                del factory_args['client_factory'] # Clean up the original nested dict
+                del factory_args['client_factory']
+            if 'classes_to_expose' in factory_args:
+                 del factory_args['classes_to_expose']
+            if 'enabled' in factory_args:
+                 del factory_args['enabled']
 
-            clients = factory_func(**factory_args)
+            clients = factory_func(classes_to_expose=class_paths, **factory_args)
             initialized_clients.update(clients)
         except Exception as e:
             print(f"Failed to initialize SDK '{sdk_name}': {e}")
             
     state["initialized_clients"] = initialized_clients
+    state["alias_map"] = alias_map
     print(f"Total initialized clients: {len(initialized_clients)}")
 
 def generate_tool_schemas():
-    """Introspects initialized clients to generate schemas based on config."""
     print("Generating tool schemas...")
     all_tools = []
     initialized_clients = state.get("initialized_clients", {})
@@ -130,12 +127,11 @@ def generate_tool_schemas():
 
 @app.on_event("startup")
 async def startup_event():
-    """Runs all initialization steps when the server starts."""
     load_configuration(config_path=CONFIG_FILE_PATH)
     initialize_sdk_clients()
     generate_tool_schemas()
 
-# --- API Endpoints (Unchanged) ---
+# --- API Endpoints ---
 @app.get("/")
 def read_root():
     return {
@@ -155,10 +151,16 @@ async def execute_tool_endpoint(request: ToolExecutionRequest):
         result = execute_tool(
             tool_name=request.tool_name,
             arguments=request.arguments,
-            initialized_clients=state.get("initialized_clients", {})
+            initialized_clients=state.get("initialized_clients", {}),
+            alias_map=state.get("alias_map", {})
         )
         return {"result": result}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An error occurred during tool execution: {str(e)}")
+        # **NEW**: Add detailed logging for any unexpected errors.
+        # This will print the full error traceback to the server's console.
+        print("\n--- UNEXPECTED SERVER ERROR ---")
+        traceback.print_exc()
+        print("-----------------------------\n")
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")

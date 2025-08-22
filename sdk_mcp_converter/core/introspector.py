@@ -45,12 +45,9 @@ def generate_schema_for_method(method: object) -> Dict[str, Any]:
     }
 
 def _discover_tools_recursive(current_object: object, config: Dict, name_prefix: str) -> List[Dict[str, Any]]:
-    """
-    A recursive helper function to walk through nested operations groups.
-    """
+    """A recursive helper function to walk through nested operations groups."""
     tools = []
     
-    # Base Case 1: Discover methods at the current level
     if "include_methods" in config:
         include_methods = config.get("include_methods")
         for name, method in inspect.getmembers(current_object, inspect.ismethod):
@@ -61,7 +58,6 @@ def _discover_tools_recursive(current_object: object, config: Dict, name_prefix:
                     schema['function']['name'] = tool_name
                     tools.append(schema)
 
-    # Recursive Step: Discover methods in nested groups
     if "operations_groups" in config:
         for group_config in config["operations_groups"]:
             group_name = group_config["name"]
@@ -76,6 +72,8 @@ def _discover_tools_recursive(current_object: object, config: Dict, name_prefix:
 def discover_tools(client_instance: object, class_path_str: str, class_config: Dict) -> List[Dict[str, Any]]:
     """
     Discovers all tools by initiating the recursive discovery process.
+    **NEW**: Uses the 'alias' from the config for the tool name prefix.
     """
-    class_name_mangled = class_path_str.replace('.', '_')
-    return _discover_tools_recursive(client_instance, class_config, class_name_mangled)
+    # Use the short alias if it exists, otherwise fall back to the long mangled class name.
+    name_prefix = class_config.get("alias", class_path_str.replace('.', '_'))
+    return _discover_tools_recursive(client_instance, class_config, name_prefix)
