@@ -3,7 +3,7 @@
 import yaml
 import importlib
 import os
-import traceback
+import traceback # <-- Already imported, but crucial for this feature
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Any, List
@@ -23,7 +23,7 @@ class ToolExecutionRequest(BaseModel):
 app = FastAPI(
     title="Mission Control Plane (MCP) for SDKs",
     description="Dynamically exposes Python SDK methods as tools for AI agents.",
-    version="1.5.1", # Version bump for serialization limits
+    version="1.6.0", # Version bump for self-debugging feature
 )
 
 # --- Server Startup Logic (Unchanged) ---
@@ -93,7 +93,6 @@ def initialize_sdk_clients():
     print(f"Total initialized clients: {len(initialized_clients)}")
 
 def generate_tool_schemas():
-    # This function is now in core/introspector.py
     from core.introspector import discover_tools
     print("Generating tool schemas...")
     all_tools = []
@@ -148,21 +147,26 @@ def get_tools():
 @app.post("/execute")
 async def execute_tool_endpoint(request: ToolExecutionRequest):
     try:
-        # The result from execute_tool is now a dictionary.
         result_dict = execute_tool(
             tool_name=request.tool_name,
             arguments=request.arguments,
             initialized_clients=state.get("initialized_clients", {}),
             alias_map=state.get("alias_map", {})
         )
-        # **FIX**: Return the entire dictionary, not just the 'result' key.
         return result_dict
     except ToolTimeoutError as e:
         raise HTTPException(status_code=408, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
+        # **MODIFIED**: Capture the full traceback and send it in the response.
+        tb_str = traceback.format_exc()
         print("\n--- UNEXPECTED SERVER ERROR ---")
-        traceback.print_exc()
+        print(tb_str)
         print("-----------------------------\n")
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+        # The orchestrator will parse this structured error.
+        error_detail = {
+            "error_message": str(e),
+            "traceback": tb_str
+        }
+        raise HTTPException(status_code=500, detail=error_detail)
