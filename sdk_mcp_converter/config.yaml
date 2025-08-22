@@ -1,0 +1,15 @@
+# config.yaml
+
+sdks:
+  kubernetes:
+    # client_factory tells our app HOW to initialize the SDK client.
+    # 'path' points to a Python function we will create later.
+    client_factory:
+      path: "core.clients.init_kubernetes_clients"
+
+    # classes_to_expose lists the specific API client classes within the SDK
+    # that we want to scan for methods (tools).
+    classes_to_expose:
+      - "kubernetes.client.CoreV1Api"
+      # We could easily add more later, like:
+      # - "kubernetes.client.AppsV1Api"
