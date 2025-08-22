@@ -9,5 +9,7 @@ Done
 EXAMPLES
 config.yaml - sets up kubernetes with a select set of methods 
 	(openai doesn't let you have more than 128 tools at once so I added this functionality to be able to actually use the product)
+
 config_azure.yaml - introduces the operations_groups key, which can be infinitely nested as appropriate (the program will serialize and deserialize recursively as needed)
+
 config_github.yaml - supports the default desired behavior in the project spec (add all available methods) using discover: auto
